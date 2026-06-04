@@ -2,7 +2,39 @@
 name = "cortana"
 version = "0.1.0"
 edition = "2021"
-description = "Terminal-first AI assistant prototype with no-token recaps and coding-agent integration commands."
+description = "Terminal-first AI assistant with animated face, speech, no-token recaps, and coding-agent integration"
 license = "MIT"
 
 [dependencies]
+# TUI
+ratatui = "0.28"
+crossterm = "0.28"
+unicode-width = "0.1"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP + JSON
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"], default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Config
+toml = "0.8"
+directories = "5"
+
+# Speech (system TTS)
+tts = "0.25"
+
+# Face rendering
+tiny-skia = "0.11"
+
+# Image encoding for kitty protocol
+base64 = "0.22"
+
+# CLI (we use manual parsing for zero-dependency CLI, but clap for daemon mode)
+clap = { version = "4", features = ["derive"], optional = true }
+
+[features]
+default = []
+clap-cli = ["clap"]
