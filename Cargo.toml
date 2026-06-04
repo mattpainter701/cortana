@@ -1,0 +1,8 @@
+[package]
+name = "cortana"
+version = "0.1.0"
+edition = "2021"
+description = "Terminal-first AI assistant prototype with no-token recaps and coding-agent integration commands."
+license = "MIT"
+
+[dependencies]
