@@ -40,6 +40,7 @@ pub struct TuiApp {
 pub struct TuiMessage {
     pub role: String,
     pub content: String,
+    #[allow(dead_code)]
     pub timestamp: String,
 }
 
@@ -209,6 +210,18 @@ impl TuiApp {
             });
 
         f.render_widget(canvas, area);
+
+        // If Kitty backend is active, overlay pixmap rendering
+        #[cfg(feature = "kitty-render")]
+        self.display_kitty_overlay(area, params);
+    }
+
+    #[cfg(feature = "kitty-render")]
+    fn display_kitty_overlay(&self, area: Rect, params: &FaceParams) {
+        use crate::renderer::kitty;
+        if self.face_renderer.backend() == crate::renderer::RendererBackend::Kitty {
+            kitty::display_kitty_face(params, area.x as u32, area.y as u32, 12, 24);
+        }
     }
 
     fn draw_recap_banner(&self, f: &mut Frame, area: Rect) {

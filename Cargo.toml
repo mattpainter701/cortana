@@ -27,7 +27,7 @@ directories = "5"
 tts = "0.25"
 
 # Face rendering
-tiny-skia = "0.11"
+tiny-skia = { version = "0.11", optional = true }
 
 # Image encoding for kitty protocol
 base64 = "0.22"
@@ -38,3 +38,4 @@ clap = { version = "4", features = ["derive"], optional = true }
 [features]
 default = []
 clap-cli = ["clap"]
+kitty-render = ["tiny-skia"]

@@ -3,6 +3,7 @@ use std::sync::mpsc;
 /// Event emitted during speech playback for lip-sync animation.
 #[derive(Debug, Clone)]
 pub enum SpeechEvent {
+    #[allow(dead_code)]
     Started(String),
     #[allow(dead_code)]
     Amplitude { time_ms: u64, rms: f32 },

@@ -56,6 +56,7 @@ impl Session {
         self.updated_at = chrono_now();
     }
 
+    #[allow(dead_code)]
     pub fn touch_file(&mut self, path: &str) {
         if !self.files_touched.contains(&path.to_string()) {
             self.files_touched.push(path.to_string());
