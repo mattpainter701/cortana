@@ -30,6 +30,7 @@ impl RendererBackend {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 struct Particle {
     x: f64,
@@ -43,9 +44,11 @@ struct Particle {
 pub struct FaceRenderer {
     backend: RendererBackend,
     frame_count: Cell<u64>,
+    #[allow(dead_code)]
     particles: Cell<Vec<Particle>>,
 }
 
+#[allow(dead_code)]
 impl FaceRenderer {
     pub fn new(backend: RendererBackend) -> Self {
         Self {
@@ -1422,6 +1425,7 @@ pub mod kitty {
 
 // ── color helpers ──
 
+#[allow(dead_code)]
 fn dim(color: Color, alpha: f64) -> Color {
     if alpha >= 1.0 {
         return color;
@@ -1437,6 +1441,7 @@ fn dim(color: Color, alpha: f64) -> Color {
     }
 }
 
+#[allow(dead_code)]
 fn rand_f64() -> f64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now()

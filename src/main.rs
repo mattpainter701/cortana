@@ -1,5 +1,7 @@
 mod agent;
+mod avatar;
 mod config;
+mod expression;
 mod face;
 mod renderer;
 mod session;

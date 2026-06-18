@@ -5,6 +5,7 @@ pub struct FaceParams {
     pub smile: f32,
     pub brow_raise: f32,
     pub eye_squint: f32,
+    pub cheek_lift: f32,
     pub head_tilt: f32,
     pub gaze_x: f32,
     pub gaze_y: f32,
@@ -20,6 +21,7 @@ impl Default for FaceParams {
             smile: 0.0,
             brow_raise: 0.0,
             eye_squint: 0.0,
+            cheek_lift: 0.0,
             head_tilt: 0.0,
             gaze_x: 0.0,
             gaze_y: 0.0,
@@ -43,6 +45,7 @@ impl FaceParams {
             smile: clamp(valence * 0.8 + arousal * 0.15, -1.0, 1.0),
             brow_raise: clamp(arousal * 0.6 - valence.min(0.0) * 0.35, -1.0, 1.0),
             eye_squint: clamp01(valence.max(0.0) * 0.35 + audio_rms * 0.2),
+            cheek_lift: clamp01(valence.max(0.0) * 0.35 + audio_rms * 0.28),
             head_tilt: clamp(
                 valence * 4.0 + (idle_seconds * 1.7).sin() * 1.5,
                 -10.0,
@@ -59,11 +62,12 @@ impl FaceParams {
     /// Encodes the current face parameters as the daemon/renderer protocol line.
     pub fn to_protocol_line(self) -> String {
         format!(
-            "FACE mouth_open={:.3} smile={:.3} brow_raise={:.3} eye_squint={:.3} head_tilt={:.3} gaze_x={:.3} gaze_y={:.3} breathing_phase={:.3} arousal={:.3} valence={:.3}",
+            "FACE mouth_open={:.3} smile={:.3} brow_raise={:.3} eye_squint={:.3} cheek_lift={:.3} head_tilt={:.3} gaze_x={:.3} gaze_y={:.3} breathing_phase={:.3} arousal={:.3} valence={:.3}",
             self.mouth_open,
             self.smile,
             self.brow_raise,
             self.eye_squint,
+            self.cheek_lift,
             self.head_tilt,
             self.gaze_x,
             self.gaze_y,
@@ -102,6 +106,7 @@ impl Lerp for FaceParams {
             smile: lerp(self.smile, target.smile, alpha),
             brow_raise: lerp(self.brow_raise, target.brow_raise, alpha),
             eye_squint: lerp(self.eye_squint, target.eye_squint, alpha),
+            cheek_lift: lerp(self.cheek_lift, target.cheek_lift, alpha),
             head_tilt: lerp(self.head_tilt, target.head_tilt, alpha),
             gaze_x: lerp(self.gaze_x, target.gaze_x, alpha),
             gaze_y: lerp(self.gaze_y, target.gaze_y, alpha),

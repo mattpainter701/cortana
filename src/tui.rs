@@ -1,5 +1,7 @@
 use crate::agent::LlmClient;
+use crate::avatar::AvatarRenderer;
 use crate::config::CortanaConfig;
+use crate::expression::{ExpressionController, PresenceMode};
 use crate::face::{FaceParams, FaceState};
 use crate::renderer::{FaceRenderer, RendererBackend};
 use crate::session::SessionStore;
@@ -10,7 +12,6 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
-use ratatui::widgets::canvas::Canvas;
 use ratatui::{Frame, Terminal};
 use std::io;
 use std::time::{Duration, Instant};
@@ -19,6 +20,7 @@ pub struct TuiApp {
     pub config: CortanaConfig,
     pub sessions: SessionStore,
     pub face_state: FaceState,
+    pub expression: ExpressionController,
     pub face_renderer: FaceRenderer,
     pub tts: TtsEngine,
     pub llm: Option<LlmClient>,
@@ -63,6 +65,7 @@ impl TuiApp {
             config,
             sessions,
             face_state: FaceState::default(),
+            expression: ExpressionController::default(),
             face_renderer: FaceRenderer::new(backend),
             tts,
             llm,
@@ -85,7 +88,10 @@ impl TuiApp {
         }
     }
 
-    pub fn run(&mut self, terminal: &mut Terminal<impl ratatui::backend::Backend>) -> io::Result<()> {
+    pub fn run(
+        &mut self,
+        terminal: &mut Terminal<impl ratatui::backend::Backend>,
+    ) -> io::Result<()> {
         self.last_frame = Instant::now();
         while self.running {
             // Check for speech events
@@ -96,8 +102,7 @@ impl TuiApp {
             self.last_frame = Instant::now();
             self.idle_seconds += delta;
 
-            // Compute target face params based on current state
-            let target = self.compute_face_target();
+            let target = self.compute_face_target(delta);
             self.face_state.tick_toward(target, delta);
 
             // Draw frame
@@ -126,45 +131,44 @@ impl TuiApp {
                         self.status = "Ready.".into();
                         self.speech_rx = None;
                         self.current_speech_event = None;
+                        self.expression.observe_speech(&event);
                         return;
                     }
                     _ => {}
                 }
+                self.expression.observe_speech(&event);
                 self.current_speech_event = Some(event);
             }
         }
     }
 
-    fn compute_face_target(&self) -> FaceParams {
-        if let Some(SpeechEvent::Amplitude { rms, .. }) = &self.current_speech_event {
-            // During speech, drive face from audio amplitude
-            let valence = self.face_state.params().valence;
-            let arousal = 0.6;
-            FaceParams::from_signals(*rms, valence, arousal, self.idle_seconds)
-        } else if self.thinking {
-            // Thinking: slightly furrowed, eyes narrow, subtle motion
-            let _params = self.face_state.params();
-            FaceParams::from_signals(0.05, -0.1, 0.4, self.idle_seconds)
-        } else if self.mode == InputMode::Chat {
-            // Chat mode: attentive
-            FaceParams::from_signals(0.0, 0.2, 0.3, self.idle_seconds)
+    fn compute_face_target(&mut self, delta_seconds: f32) -> FaceParams {
+        let mode = if self.thinking {
+            PresenceMode::Thinking
         } else {
-            // Idle: subtle breathing, occasional eye movement
-            FaceParams::from_signals(0.0, 0.0, 0.1, self.idle_seconds)
-        }
+            match self.mode {
+                InputMode::Speaking => PresenceMode::Speaking,
+                InputMode::Chat => PresenceMode::Attentive,
+                InputMode::Normal => PresenceMode::Idle,
+            }
+        };
+        self.expression.set_mode(mode);
+        self.expression.tick(delta_seconds, self.idle_seconds)
     }
 
     fn draw(&mut self, f: &mut Frame) {
         let face_params = self.face_state.params();
+        let area = f.area();
+        let face_width = area.width.saturating_sub(24).clamp(36, 88);
 
         // Main layout: left (face) | right (content)
         let main = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(36),  // face panel
-                Constraint::Min(40),     // content
+                Constraint::Length(face_width), // face panel
+                Constraint::Min(24),            // content
             ])
-            .split(f.area());
+            .split(area);
 
         // Face panel
         self.draw_face(f, main[0], &face_params);
@@ -173,9 +177,9 @@ impl TuiApp {
         let right = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),   // recap banner
-                Constraint::Min(5),      // messages
-                Constraint::Length(3),   // input
+                Constraint::Length(3), // recap banner
+                Constraint::Min(5),    // messages
+                Constraint::Length(3), // input
             ])
             .split(main[1]);
 
@@ -186,10 +190,7 @@ impl TuiApp {
         // Status bar at the very bottom
         let status_area = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(0),
-                Constraint::Length(1),
-            ])
+            .constraints([Constraint::Min(0), Constraint::Length(1)])
             .split(f.area());
 
         self.draw_status(f, status_area[1]);
@@ -201,15 +202,14 @@ impl TuiApp {
             .title(" Cortana ")
             .border_style(Style::default().fg(Color::Cyan));
 
-        let canvas = Canvas::default()
+        let inner = block.inner(area);
+        let avatar =
+            AvatarRenderer::render_lines(inner.width, inner.height, params, self.idle_seconds);
+        let portrait = Paragraph::new(avatar)
             .block(block)
-            .x_bounds([-50.0, 50.0])
-            .y_bounds([-60.0, 60.0])
-            .paint(|ctx| {
-                self.face_renderer.paint_on_canvas(ctx, params);
-            });
+            .wrap(Wrap { trim: false });
 
-        f.render_widget(canvas, area);
+        f.render_widget(portrait, area);
 
         // If Kitty backend is active, overlay pixmap rendering
         #[cfg(feature = "kitty-render")]
@@ -281,14 +281,9 @@ impl TuiApp {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("{role_prefix}> "),
-                    Style::default()
-                        .fg(role_color)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(role_color).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    &msg.content,
-                    Style::default().fg(Color::White),
-                ),
+                Span::styled(&msg.content, Style::default().fg(Color::White)),
             ]));
         }
 
@@ -340,21 +335,16 @@ impl TuiApp {
                 },
                 Style::default().fg(Color::White),
             ),
-            Span::styled(
-                " ",
-                Style::default()
-                    .bg(Color::White)
-                    .fg(Color::Black),
-            ),
+            Span::styled(" ", Style::default().bg(Color::White).fg(Color::Black)),
         ]));
         f.render_widget(text, inner);
     }
 
     fn draw_status(&self, f: &mut Frame, area: Rect) {
         let backend_label = match self.face_renderer.backend() {
-            RendererBackend::Canvas => "Canvas",
-            RendererBackend::Kitty => "Kitty",
-            RendererBackend::Sixel => "Sixel",
+            RendererBackend::Canvas => "Avatar",
+            RendererBackend::Kitty => "Avatar+Kitty",
+            RendererBackend::Sixel => "Avatar+Sixel",
         };
 
         let llm_status = if self.llm.as_ref().map_or(false, |l| l.is_available()) {
@@ -376,10 +366,7 @@ impl TuiApp {
                     .fg(Color::DarkGray)
                     .add_modifier(Modifier::DIM),
             ),
-            Span::styled(
-                &self.status,
-                Style::default().fg(Color::DarkGray),
-            ),
+            Span::styled(&self.status, Style::default().fg(Color::DarkGray)),
             Span::styled(
                 " │ Esc:quit /:cmd Tab:mode",
                 Style::default()
@@ -403,6 +390,7 @@ impl TuiApp {
                         if key.code == KeyCode::Esc {
                             self.speech_rx = None;
                             self.current_speech_event = None;
+                            self.expression.observe_speech(&SpeechEvent::Ended);
                             self.mode = InputMode::Normal;
                             self.status = "Speech cancelled.".into();
                         }
@@ -519,7 +507,10 @@ impl TuiApp {
             }
             "ask" => {
                 if args.is_empty() {
-                    self.add_response("system", "Usage: /ask <your question> — sends to LLM (uses tokens)");
+                    self.add_response(
+                        "system",
+                        "Usage: /ask <your question> — sends to LLM (uses tokens)",
+                    );
                 } else {
                     self.handle_ask(args);
                 }
@@ -536,11 +527,14 @@ impl TuiApp {
                 } else {
                     let result = summary::summarize(args, SummaryMode::Text, None);
                     self.recap_banner = result.to_banner();
-                    self.add_response("system", &format!(
-                        "Summary (0 tokens): {}\nKeywords: {}",
-                        result.summary,
-                        result.keywords.join(", ")
-                    ));
+                    self.add_response(
+                        "system",
+                        &format!(
+                            "Summary (0 tokens): {}\nKeywords: {}",
+                            result.summary,
+                            result.keywords.join(", ")
+                        ),
+                    );
                 }
                 self.idle_seconds = 0.0;
             }
@@ -561,7 +555,10 @@ impl TuiApp {
                 if args.is_empty() {
                     let ctx = &self.sessions.current().context;
                     if ctx.is_empty() {
-                        self.add_response("system", "No context set. Use /context <description> to set.");
+                        self.add_response(
+                            "system",
+                            "No context set. Use /context <description> to set.",
+                        );
                     } else {
                         self.add_response("system", &format!("Current context: {ctx}"));
                     }
@@ -638,7 +635,8 @@ impl TuiApp {
         if lower.contains("what") && (lower.contains("doing") || lower.contains("working")) {
             let ctx = &self.sessions.current().context;
             if ctx.is_empty() {
-                return "No context set yet. Use /context to tell me what you're working on.".into();
+                return "No context set yet. Use /context to tell me what you're working on."
+                    .into();
             }
             return format!("Current context: {ctx}");
         }
@@ -659,6 +657,9 @@ impl TuiApp {
             content: content.to_string(),
             timestamp: now,
         });
+        if role == "cortana" {
+            self.expression.observe_response(content);
+        }
         self.sessions.current_mut().add_message(role, content);
         self.sessions.save().ok();
     }
@@ -685,7 +686,12 @@ fn chrono_now() -> String {
             let day = (day_of_year % 30 + 1).min(31);
             format!(
                 "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-                year, month, day, hours, minutes, secs % 60
+                year,
+                month,
+                day,
+                hours,
+                minutes,
+                secs % 60
             )
         }
         Err(_) => "unknown".to_string(),

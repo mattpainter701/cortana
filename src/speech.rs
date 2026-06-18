@@ -6,7 +6,10 @@ pub enum SpeechEvent {
     #[allow(dead_code)]
     Started(String),
     #[allow(dead_code)]
-    Amplitude { time_ms: u64, rms: f32 },
+    Amplitude {
+        time_ms: u64,
+        rms: f32,
+    },
     Ended,
 }
 
@@ -58,47 +61,29 @@ impl TtsEngine {
         std::thread::spawn(move || {
             tx.send(SpeechEvent::Started(text.clone())).ok();
 
-            // Try system TTS via the `tts` crate
-            match tts::Tts::default() {
+            let total_duration_ms = estimate_speech_duration_ms(&text);
+            let audio_text = text.clone();
+            let audio_thread = std::thread::spawn(move || match tts::Tts::default() {
                 Ok(mut tts_engine) => {
-                    // Estimate amplitude events based on text characteristics
-                    let words: Vec<&str> = text.split_whitespace().collect();
-                    let total_duration_ms = (words.len() as u64 * 350).max(500); // rough estimate
-
-                    for i in 0..20 {
-                        let time_ms = (total_duration_ms * i) / 20;
-                        // Simulate amplitude from text properties
-                        let progress = i as f32 / 20.0;
-                        let rms = if words.is_empty() {
-                            0.1
-                        } else {
-                            // Vary amplitude based on position in phrase
-                            let base = 0.2;
-                            let emphasis = (progress * std::f32::consts::PI * 2.0).sin().abs() * 0.4;
-                            (base + emphasis).min(1.0)
-                        };
-                        tx.send(SpeechEvent::Amplitude { time_ms, rms }).ok();
-                    }
-
-                    // Actually speak
-                    if let Err(e) = tts_engine.speak(&text, false) {
+                    if let Err(e) = tts_engine.speak(&audio_text, false) {
                         eprintln!("TTS error: {e}");
                     }
+                }
+                Err(e) => eprintln!("TTS init error: {e}"),
+            });
 
-                    // Brief wait for speech to finish
-                    std::thread::sleep(std::time::Duration::from_millis(total_duration_ms + 200));
+            let started = std::time::Instant::now();
+            loop {
+                let time_ms = started.elapsed().as_millis() as u64;
+                if time_ms > total_duration_ms {
+                    break;
                 }
-                Err(e) => {
-                    eprintln!("TTS init error: {e}");
-                    // Emit a few amplitude events for visual feedback even without audio
-                    for i in 0..8 {
-                        let time_ms = i * 50;
-                        let rms = 0.15;
-                        tx.send(SpeechEvent::Amplitude { time_ms, rms }).ok();
-                    }
-                }
+                let rms = estimated_rms(&text, time_ms, total_duration_ms);
+                tx.send(SpeechEvent::Amplitude { time_ms, rms }).ok();
+                std::thread::sleep(std::time::Duration::from_millis(45));
             }
 
+            let _ = audio_thread.join();
             tx.send(SpeechEvent::Ended).ok();
         });
 
@@ -114,4 +99,39 @@ impl TtsEngine {
             }
         });
     }
+}
+
+fn estimate_speech_duration_ms(text: &str) -> u64 {
+    let words = text.split_whitespace().count() as u64;
+    let punctuation_pause = text
+        .chars()
+        .filter(|c| matches!(c, '.' | ',' | ';' | ':' | '?' | '!'))
+        .count() as u64
+        * 90;
+    (words * 285 + punctuation_pause).clamp(650, 12_000)
+}
+
+fn estimated_rms(text: &str, time_ms: u64, total_duration_ms: u64) -> f32 {
+    let progress = time_ms as f32 / total_duration_ms.max(1) as f32;
+    let envelope = (std::f32::consts::PI * progress).sin().max(0.18);
+    let syllable = (time_ms as f32 / 82.0 * std::f32::consts::TAU).sin().abs();
+    let secondary = (time_ms as f32 / 137.0 * std::f32::consts::TAU).sin().abs();
+    let emphasis = if emphasized_region(text, progress) {
+        0.18
+    } else {
+        0.0
+    };
+    (0.12 + envelope * (syllable * 0.48 + secondary * 0.16) + emphasis).clamp(0.08, 0.92)
+}
+
+fn emphasized_region(text: &str, progress: f32) -> bool {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.is_empty() {
+        return false;
+    }
+    let idx = ((words.len() as f32 - 1.0) * progress).round() as usize;
+    let word = words[idx.min(words.len() - 1)];
+    word.ends_with('!')
+        || word.ends_with('?')
+        || word.chars().filter(|c| c.is_uppercase()).count() > 1
 }

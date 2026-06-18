@@ -1,9 +1,12 @@
 # Cortana
 
-Cortana is a Rust-first, terminal-native AI assistant prototype. This repository now contains the first implementation slice: a command-line surface for no-token summaries, coding-agent integration outputs, speech scaffolding, and the facial-animation parameter protocol.
+Cortana is a Rust-first, terminal-native AI assistant prototype: a live terminal companion with a holographic avatar, no-token summaries, speech scaffolding, session memory, and optional OpenCode integration.
+
+![Cortana terminal avatar](assets/cortana-avatar.png)
 
 ## Current Features
 
+- `cortana` / `cortana tui`: launches the terminal-native Cortana interface with a live image-backed hologram avatar.
 - `boot`: renders the minimal cyan activation ring and `Hi, I’m Cortana.` greeting at startup.
 - `appear` / `appearance`: renders the grainy blue pixel-hologram presence reveal used when Cortana appears to speak.
 - `session start`: renders the full session-start sequence by combining the boot ring, hologram reveal, and online status.
@@ -11,14 +14,17 @@ Cortana is a Rust-first, terminal-native AI assistant prototype. This repository
 - `summarize --fast --mode code`: extracts code symbols and comments for rapid file recaps.
 - `summarize --fast --mode diff`: summarizes changed files from unified git diffs.
 - `--json`: emits machine-readable output for Claude Code, OpenCode, or other terminal agents.
-- `speak`: provides the placeholder command that will later route text into system TTS or ElevenLabs.
+- `speak`: routes text into system TTS and drives mouth/cheek expression events for the avatar.
 - `daemon --stdio`: starts with the session visual sequence, then emits an initial `FACE ...` protocol line for the renderer.
 - `opencode install`: installs the optional OpenCode addon while keeping `cortana` available as a standalone terminal TUI.
-- `FaceParams`/`FaceState`: models continuous mouth, gaze, brow, valence, arousal, and smoothing values for the future TUI renderer.
+- `FaceParams`/`FaceState`: models continuous mouth, gaze, brow, cheek lift, valence, arousal, and smoothing values for avatar animation.
+- Expression controller: maps idle, attentive, thinking, and speaking states into facial gestures.
 
 ## Examples
 
 ```bash
+cortana
+cortana tui
 cargo run -- boot
 cargo run -- appear
 cargo run -- session start
@@ -40,8 +46,8 @@ Fast summaries are local and extractive. They do not call an LLM and report `tok
 
 ## Next Implementation Targets
 
-1. Add persistent session storage for `recap --session current`.
-2. Replace the `speak` placeholder with a system TTS provider.
-3. Add a `ratatui` layout around the CLI core.
-4. Convert the boot and appearance sequences into frame-based Kitty/Sixel/ASCII visualizer animations driven by `FaceParams`.
+1. Replace estimated speech amplitude with real audio/viseme timing.
+2. Add bidirectional voice input.
+3. Add richer facial landmarks for eyes, mouth, cheeks, and brows.
+4. Add image-protocol rendering for terminals that support higher fidelity than cell pixels.
 5. Extend the OpenCode addon with richer TUI commands once OpenCode exposes more stable sidebar/panel APIs.

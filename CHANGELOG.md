@@ -3,6 +3,10 @@
 ## [0.2.0] — Unreleased
 
 ### Added
+- Image-backed terminal avatar renderer with adaptive face crop for smaller terminal panels
+- Expression controller for idle, attentive, thinking, and speaking presence states
+- Speech-driven mouth and cheek animation events from system TTS timing estimates
+- README avatar image and updated TUI usage notes
 - Cortana-like canvas face renderer: heart-shaped feminine face, signature crown (5 overlapping arc bands), hair silhouette, neck, cheek glow, enhanced holographic aura/particles
 - Kitty graphics protocol renderer using tiny-skia (optional, gated behind `kitty-render` feature)
   - Full `render_pixmap()` implementation with anti-aliased vector paths
@@ -14,6 +18,8 @@
 - OpenCode integration via `.opencode/skills/cortana/SKILL.md`
 
 ### Changed
+- TUI face panel now uses the image-backed avatar renderer instead of the older canvas face path
+- Avatar rendering now tight-crops toward facial landmarks on compact terminal sizes
 - Canvas face renderer completely redesigned — generic abstract face replaced with Cortana hologram identity
 - Face proportions improved: heart-shaped jawline, Cupid's-bow mouth, almond eyes with highlights, arched brows, better nose
 - `rand_f64()` now uses actual system time-based randomness for particle variation
