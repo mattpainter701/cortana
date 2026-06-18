@@ -13,6 +13,7 @@ Cortana is a Rust-first, terminal-native AI assistant prototype. This repository
 - `--json`: emits machine-readable output for Claude Code, OpenCode, or other terminal agents.
 - `speak`: provides the placeholder command that will later route text into system TTS or ElevenLabs.
 - `daemon --stdio`: starts with the session visual sequence, then emits an initial `FACE ...` protocol line for the renderer.
+- `opencode install`: installs the optional OpenCode addon while keeping `cortana` available as a standalone terminal TUI.
 - `FaceParams`/`FaceState`: models continuous mouth, gaze, brow, valence, arousal, and smoothing values for the future TUI renderer.
 
 ## Examples
@@ -26,7 +27,12 @@ cargo run -- summarize --fast --mode code --json src/main.rs
 git diff | cargo run -- summarize --fast --mode diff --json
 cargo run -- speak "Build completed successfully."
 cargo run -- daemon --stdio
+cargo run -- opencode install --project
 ```
+
+## Terminal-first with optional OpenCode addon
+
+Run `cortana` or `cortana tui` for the full terminal-native experience. The OpenCode integration is intentionally an addon, not a replacement: install it with `cortana opencode install --project` to copy `integrations/opencode/cortana.ts` into `.opencode/plugins/cortana.ts`, or use `--global` for `~/.config/opencode/plugins/cortana.ts`. OpenCode auto-loads local plugins from those directories, and the addon exposes Cortana tools for the banner, zero-token recaps, and zero-token summaries. If the binary is not on `PATH`, set `CORTANA_BIN=/absolute/path/to/cortana` before launching OpenCode.
 
 ## Token Usage
 
@@ -38,4 +44,4 @@ Fast summaries are local and extractive. They do not call an LLM and report `tok
 2. Replace the `speak` placeholder with a system TTS provider.
 3. Add a `ratatui` layout around the CLI core.
 4. Convert the boot and appearance sequences into frame-based Kitty/Sixel/ASCII visualizer animations driven by `FaceParams`.
-5. Add Claude Code/OpenCode hook examples once the JSON contract stabilizes.
+5. Extend the OpenCode addon with richer TUI commands once OpenCode exposes more stable sidebar/panel APIs.

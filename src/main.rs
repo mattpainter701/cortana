@@ -52,6 +52,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "recap" => cmd_recap(&args[1..]),
         "speak" => cmd_speak(&args[1..]),
         "daemon" => cmd_daemon(&args[1..]),
+        "opencode" => cmd_opencode(&args[1..]),
         "config" => cmd_config(&args[1..]),
         other => Err(format!("unknown command '{other}'. Run `cortana --help`.")),
     }
@@ -301,6 +302,60 @@ fn cmd_config(args: &[String]) -> Result<(), String> {
     }
 }
 
+fn cmd_opencode(args: &[String]) -> Result<(), String> {
+    match args.first().map(String::as_str) {
+        Some("install") => {
+            let mut target = PathBuf::from(".opencode/plugins/cortana.ts");
+            let mut print_only = false;
+            let mut i = 1;
+
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--global" => {
+                        target = directories::BaseDirs::new()
+                            .map(|d| d.config_dir().join("opencode/plugins/cortana.ts"))
+                            .ok_or("could not resolve user config directory for --global")?;
+                    }
+                    "--project" => {
+                        target = PathBuf::from(".opencode/plugins/cortana.ts");
+                    }
+                    "--path" => {
+                        i += 1;
+                        target = args
+                            .get(i)
+                            .map(PathBuf::from)
+                            .ok_or("--path requires a destination file")?;
+                    }
+                    "--print" => print_only = true,
+                    flag => return Err(format!("unknown opencode install flag '{flag}'")),
+                }
+                i += 1;
+            }
+
+            let plugin = include_str!("../integrations/opencode/cortana.ts");
+            if print_only {
+                print!("{plugin}");
+                return Ok(());
+            }
+
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+            }
+            fs::write(&target, plugin).map_err(|e| format!("write {}: {e}", target.display()))?;
+            println!("OpenCode Cortana addon installed to {}", target.display());
+            println!("Set CORTANA_BIN=/path/to/cortana if the binary is not on PATH.");
+            Ok(())
+        }
+        Some("path") => {
+            println!("integrations/opencode/cortana.ts");
+            Ok(())
+        }
+        Some(cmd) => Err(format!("unknown opencode subcommand '{cmd}'")),
+        None => Err("opencode requires a subcommand: install, path".into()),
+    }
+}
+
 // ── Help ────────────────────────────────────────────────────────────
 
 fn print_help() {
@@ -318,6 +373,7 @@ USAGE:\n  \
   cortana recap --session current [--format markdown|json] [--speak]\n  \
   cortana speak <message>\n  \
   cortana daemon --stdio\n  \
+  cortana opencode install [--project|--global|--path file|--print]\n  \
   cortana config [init]       Show or create config file\n\n\
 TUI KEYBINDINGS:\n  \
   /           Enter command mode\n  \
